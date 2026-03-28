@@ -1,0 +1,58 @@
+{
+  "test_mode": true,
+  "minio": {
+    "endpoint": "http://172.88.0.63:9001",
+    "sdk_endpoint": "http://172.88.0.63:9000",
+    "access_key": "admin",
+    "secret_key": "admin123",
+    "bucket": "zhongchuanceshi",
+    "source_prefix": "测试项目",
+    "result_prefix": "results"
+  },
+  "api_model": {
+    "enabled": true,
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key": "sk-d282a63780a545ae8a1b4a2f52aa1fce",
+    "model": "Qwen3-235B int8",
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "timeout_seconds": 30
+  },
+  "local_model": {
+    "enabled": true,
+    "base_url": "",
+    "api_key": "",
+    "model": "Qwen3-235B int8",
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "timeout_seconds": 30
+  },
+  "ocr": {
+    "enabled": true,
+    "backend": "rapidocr",
+    "dpi": 300,
+    "max_pdf_pages": 8,
+    "max_excel_rows": 30,
+    "max_excel_cols": 12,
+    "max_front_chars": 4000,
+    "title_scan_lines": 80,
+    "only_when_text_empty": true,
+    "min_chars_to_skip_ocr": 80
+  },
+  "paths": {
+    "code_root": "C:/Users/57780/Desktop/zch",
+    "data_root": "C:/Users/57780/Desktop/zch",
+    "local_test_root": "C:/Users/57780/Desktop/zch/测试项目",
+    "prompt_path": "C:/Users/57780/Desktop/zch/prompt.json",
+    "filejsonrst_path": "C:/Users/57780/Desktop/zch/filejsonrst.json"
+  },
+  "logging": {
+    "level": "INFO"
+  },
+  "output": {
+    "tag_filename": "tag.json",
+    "persist_single_mode": false,
+    "indent": 2,
+    "ensure_ascii": false
+  }
+}

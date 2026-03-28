@@ -1,0 +1,50 @@
+[app]
+env = "local"
+debug = false
+default_workflow = "xiangmuku_kexingxing"
+default_question = "请结合上传文件自动识别文档类型并抽取字段"
+default_input_file = ""
+log_level = "INFO"
+save_intermediate = true
+
+[paths]
+workdir = "local_data"
+temp_dir = "local_data/tmp"
+output_dir = "local_data/output"
+
+[workflow]
+base_dir = "config/workflows"
+prompt_file = "prompt.json"
+workflow_file = "workflow.json"
+
+[models.qwen]
+provider = "aliyun_bailian"
+model = "qwen3-next-80b-a3b-instruct"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "sk-d282a63780a545ae8a1b4a2f52aa1fce"
+timeout = 300
+
+[models.deepseek]
+provider = "openai_compatible"
+model = "deepseek-v3.2"
+base_url = "https://api.modelarts-maas.com/openai/v1"
+api_key = "Wtw01zJbHYi9fam90bHKobgT2XMNmo9EzWZZi9Q8pJtLKCvQ46iXL_sNJKmZBDxOrbb6y-1m1zbZIXNZrOnGKg"
+timeout = 300
+
+[routing]
+model_key = "deepseek"
+model = ""
+temperature = 0
+max_chars = 6000
+fallback_to_keyword = true
+system_prompt = "你是一个文档类型路由器。你会根据用户问题、上传文件名、文档摘要和候选分支信息，从候选分支中选择唯一最合适的 branch_label。只返回 JSON 对象，字段必须包含 branch_label、confidence、reason。confidence 使用 0 到 1 之间的小数。"
+
+[ocr]
+enabled = true
+provider = "rapidocr"
+language = "ch"
+dpi = 220
+
+[conversion]
+soffice_command = "soffice"
+use_office_com_on_windows = true
