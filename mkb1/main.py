@@ -2207,17 +2207,17 @@ def run_job(config_path: str, override_test_mode: bool | None = None, disable_ll
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="文档信息提取系统")
+    parser = argparse.ArgumentParser(description="Document extraction compatibility entry")
     parser.add_argument("--config", default=str(PROJECT_ROOT / "config.json"))
-    parser.add_argument("--payload-json", help="单组请求 JSON 字符串")
-    parser.add_argument("--payload-file", help="单组请求 JSON 文件")
-    parser.add_argument("--filejsonrst", help="批量任务文件路径")
-    parser.add_argument("--stdin-json", action="store_true", help="从标准输入读取单组请求 JSON")
+    parser.add_argument("--payload-json", help="JSON string for a single task, a task wrapper, or a task list")
+    parser.add_argument("--payload-file", help="JSON file for a single task, a task wrapper, or a task list")
+    parser.add_argument("--filejsonrst", help="Legacy batch manifest JSON file")
+    parser.add_argument("--stdin-json", action="store_true", help="Read request JSON from stdin")
     parser.add_argument("--test-mode", choices=("true", "false"))
     return parser
 
 
-def parse_cli_payload(args: argparse.Namespace) -> dict[str, Any] | None:
+def parse_cli_payload(args: argparse.Namespace) -> Any | None:
     if args.payload_json:
         return json.loads(args.payload_json)
     if args.payload_file:
@@ -2229,18 +2229,33 @@ def parse_cli_payload(args: argparse.Namespace) -> dict[str, Any] | None:
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_argument_parser().parse_args(argv)
-    override_test_mode = None if args.test_mode is None else args.test_mode == "true"
+def load_cli_request(args: argparse.Namespace) -> Any:
     payload = parse_cli_payload(args)
     if payload is not None:
-        result = process_request(payload, config_path=args.config, persist_result=False, override_test_mode=override_test_mode)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0 if result.get("status") == "success" else 1
+        return payload
     config = load_runtime_config(args.config)
-    results = process_manifest(args.filejsonrst or config["paths"]["filejsonrst_path"], config_path=args.config, override_test_mode=override_test_mode)
-    print(json.dumps(results, ensure_ascii=False, indent=2))
-    return 0 if results and all(item.get("status") == "success" for item in results) else 1
+    manifest_path = Path(args.filejsonrst or config["paths"]["filejsonrst_path"])
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    from task_runner import process_tasks
+
+    args = build_argument_parser().parse_args(argv)
+    override_test_mode = None if args.test_mode is None else args.test_mode == "true"
+    try:
+        request = load_cli_request(args)
+        result = process_tasks(request, config_path=args.config, override_test_mode=override_test_mode)
+    except FileNotFoundError as exc:
+        detail = f"Request file not found: {exc.filename or exc}"
+        print(json.dumps({"status": "fail", "detail": detail}, ensure_ascii=False, indent=2))
+        return 1
+    except ValueError as exc:
+        print(json.dumps({"status": "fail", "detail": str(exc)}, ensure_ascii=False, indent=2))
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    status = str(result.get("status", ""))
+    return 0 if status in {"success", "partial_success"} else 1
 
 
 if __name__ == "__main__":
