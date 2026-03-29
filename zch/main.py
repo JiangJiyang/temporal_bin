@@ -185,6 +185,7 @@ PROJECT_SUFFIX_PATTERNS = (
 )
 TITLE_HINT_RE = re.compile(r"([^\n]{4,120}?(?:项目|工程|规划|办法|条例))(?:建议书|项目建议书|可行性研究报告|初步设计|竣工验收总结报告|竣工验收报告|竣工验收|专项规划|规划|编制说明)?")
 SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
+ESCAPED_UNICODE_RE = re.compile(r"#U([0-9a-fA-F]{4})")
 CONTEXT_DOC_PRIORITY = ("标签", "封面", "项目建议书", "建议书", "可行性研究", "可研", "初步设计", "初设", "竣工", "正文", "目录", "批复", "报告")
 PROJECT_NAME_HINTS = ("项目", "工程", "规划", "办法", "条例", "改造", "建设", "车间", "基地", "桥梁", "大桥", "办公楼", "主管道", "核电", "设备", "船", "厂房")
 PROJECT_NAME_REJECT_HINTS = (
@@ -677,12 +678,17 @@ class RuntimeContext:
         self.project_context_cache: dict[str, list[tuple[dict[str, str], ExtractedDocument, int]]] = {}
         self._temp_files: list[Path] = []
         if self.config["test_mode"]:
-            if self.minio.available:
+            if self.minio.available and self.config["minio"].get("prefer_remote_in_test", False):
                 self.logger.info("测试模式: MinIO 可连通，优先从 MinIO 读取")
+            elif self.minio.available:
+                self.logger.info("测试模式: MinIO 可连通，但默认仍以本地测试目录为主")
             else:
                 self.logger.warning("测试模式 MinIO 检查失败，回退本地测试目录: %s", self.minio.reason)
         elif not self.minio.available:
-            self.logger.error("生产模式 MinIO 检查失败: %s", self.minio.reason)
+            if self.config["minio"].get("allow_local_fallback", True):
+                self.logger.warning("生产模式 MinIO 检查失败，允许本地降级继续: %s", self.minio.reason)
+            else:
+                self.logger.error("生产模式 MinIO 检查失败: %s", self.minio.reason)
 
     def _load_prompt(self, prompt_path: str | Path) -> dict[str, str]:
         key = str(Path(prompt_path).resolve())
@@ -1627,6 +1633,9 @@ def load_runtime_config(config_path: str | Path) -> dict[str, Any]:
             "source_prefix": str(minio.get("source_prefix", "") or "").strip(),
             "result_prefix": str(minio.get("result_prefix", "") or "").strip(),
             "secure": minio.get("secure"),
+            "allow_local_fallback": _as_bool(minio.get("allow_local_fallback", True), True),
+            "prefer_remote_in_test": _as_bool(minio.get("prefer_remote_in_test", False), False),
+            "strict_backup_in_production": _as_bool(minio.get("strict_backup_in_production", False), False),
         },
         "api_model": {
             "enabled": _as_bool(api_model.get("enabled", True), True),
@@ -1682,6 +1691,34 @@ def choose_best_text(counter: Counter[str]) -> str:
     candidates = [item for item, score in counter.items() if score == best_score]
     candidates.sort(key=lambda item: (any(marker in item for marker in ("有限责任公司", "股份有限公司", "研究院", "研究所", "集团")), len(item), item), reverse=True)
     return candidates[0]
+
+
+def decode_escaped_unicode_name(name: str) -> str:
+    return ESCAPED_UNICODE_RE.sub(lambda match: chr(int(match.group(1), 16)), name or "")
+
+
+def encode_path_to_escaped_unicode(raw_path: str) -> str:
+    normalized = str(raw_path or "").replace("\\", "/")
+    parts: list[str] = []
+    for part in normalized.split("/"):
+        if not part:
+            continue
+        encoded = []
+        for char in part:
+            code = ord(char)
+            encoded.append(f"#U{code:04x}" if code > 127 else char)
+        parts.append("".join(encoded))
+    return "/".join(parts)
+
+
+def path_candidates_for_lookup(raw_path: str) -> list[str]:
+    normalized = str(raw_path or "").strip().replace("\\", "/")
+    candidates: list[str] = []
+    for value in (normalized, decode_escaped_unicode_name(normalized), encode_path_to_escaped_unicode(normalized)):
+        cleaned = value.strip("/")
+        if cleaned and cleaned not in candidates:
+            candidates.append(cleaned)
+    return candidates
 
 
 def resolve_reference_path(raw_path: str, base_dir: Path, fallback_dir: Path) -> Path:
@@ -2165,7 +2202,9 @@ def persist_batch_results(results: list[dict[str, Any]], runtime: RuntimeContext
         tag_path = Path(runtime.config["paths"]["code_root"]) / runtime.config["output"]["tag_filename"]
         tag_path.write_text(json.dumps(results, ensure_ascii=runtime.config["output"]["ensure_ascii"], indent=runtime.config["output"]["indent"]), encoding="utf-8")
     else:
-        runtime.logger.error("MinIO 不可用且不允许本地写入，跳过 tag.json 持久化")
+        runtime.logger.warning("MinIO 不可用且未显式启用本地写入，仍回退写入本地 tag.json")
+        tag_path = Path(runtime.config["paths"]["code_root"]) / runtime.config["output"]["tag_filename"]
+        tag_path.write_text(json.dumps(results, ensure_ascii=runtime.config["output"]["ensure_ascii"], indent=runtime.config["output"]["indent"]), encoding="utf-8")
 
 
 def process_manifest(filejsonrst_path: str | Path, config_path: str | Path = PROJECT_ROOT / "config.json", override_test_mode: bool | None = None) -> list[dict[str, Any]]:
@@ -2179,8 +2218,8 @@ def process_manifest(filejsonrst_path: str | Path, config_path: str | Path = PRO
         if not isinstance(data, list):
             runtime.logger.error("filejsonrst.json 顶层必须为数组")
             return []
-        if not runtime.config["test_mode"] and not runtime.minio.available:
-            runtime.logger.error("生产模式 MinIO 检查失败，批量直接 fail")
+        if not runtime.config["test_mode"] and not runtime.minio.available and runtime.config["minio"].get("strict_backup_in_production", False):
+            runtime.logger.error("生产模式 MinIO 检查失败，且 strict_backup_in_production=true，批量直接 fail")
             return [build_fail_output(payload_batch_size(normalize_payload(item if isinstance(item, dict) else {}))) for item in data]
         results: list[dict[str, Any]] = []
         for item in data:

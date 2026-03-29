@@ -1,28 +1,31 @@
 {
   "test_mode": true,
   "minio": {
-    "endpoint": "http://172.88.0.63:9001",
-    "sdk_endpoint": "http://172.88.0.63:9000",
-    "access_key": "admin",
-    "secret_key": "admin123",
-    "bucket": "zhongchuanceshi",
+    "endpoint": "",
+    "sdk_endpoint": "",
+    "access_key": "",
+    "secret_key": "",
+    "bucket": "",
     "source_prefix": "测试项目",
-    "result_prefix": "results"
+    "result_prefix": "results",
+    "allow_local_fallback": true,
+    "prefer_remote_in_test": false,
+    "strict_backup_in_production": false
   },
   "api_model": {
     "enabled": true,
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "api_key": "sk-d282a63780a545ae8a1b4a2f52aa1fce",
-    "model": "Qwen3-235B int8",
+    "base_url": "<REPLACE_WITH_YOUR_QWEN_GATEWAY_BASE_URL>",
+    "api_key": "<REPLACE_WITH_YOUR_QWEN_GATEWAY_API_KEY>",
+    "model": "Qwen3-235B-int8",
     "temperature": 0.0,
     "max_tokens": 512,
-    "timeout_seconds": 30
+    "timeout_seconds": 60
   },
   "local_model": {
-    "enabled": true,
+    "enabled": false,
     "base_url": "",
     "api_key": "",
-    "model": "Qwen3-235B int8",
+    "model": "Qwen3-235B-int8",
     "temperature": 0.0,
     "max_tokens": 512,
     "timeout_seconds": 30
@@ -39,13 +42,6 @@
     "only_when_text_empty": true,
     "min_chars_to_skip_ocr": 80
   },
-  "paths": {
-    "code_root": "C:/Users/57780/Desktop/zch",
-    "data_root": "C:/Users/57780/Desktop/zch",
-    "local_test_root": "C:/Users/57780/Desktop/zch/测试项目",
-    "prompt_path": "C:/Users/57780/Desktop/zch/prompt.json",
-    "filejsonrst_path": "C:/Users/57780/Desktop/zch/filejsonrst.json"
-  },
   "logging": {
     "level": "INFO"
   },
@@ -54,5 +50,12 @@
     "persist_single_mode": false,
     "indent": 2,
     "ensure_ascii": false
+  },
+  "paths": {
+    "code_root": ".",
+    "data_root": ".",
+    "local_test_root": "./测试项目",
+    "prompt_path": "./prompt.json",
+    "filejsonrst_path": "./filejsonrst.json"
   }
 }
